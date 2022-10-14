@@ -1,5 +1,4 @@
 
-#%%
 from typing import Optional, Dict, List
 
 class TrieNode:
@@ -63,4 +62,3 @@ class Trie:
 # c2 = t.get_clean_children(prefix = [2,3])
 # print(c2)
 
-# %%
