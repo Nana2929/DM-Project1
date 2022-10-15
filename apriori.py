@@ -1,5 +1,8 @@
 
 #%%
+from trie import Trie
+import logging
+from utils import powerset
 from typing import List, Tuple, Dict, Set
 from collections import Counter, defaultdict
 from itertools import chain, combinations
@@ -7,14 +10,12 @@ import trie
 import importlib
 from copy import deepcopy
 importlib.reload(trie)
-from trie import Trie
-import logging
 
 
 class Apriori:
 
     def __init__(self):
-        logging.basicConfig(level = logging.INFO)
+        logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
 
     def init_support_dict(self, C1):
@@ -44,7 +45,8 @@ class Apriori:
         self.minsup = MINSUP
         self.minconf = MINCONF
         self.logger.info(C1)
-        L1 = [set(item) for item, count in C1.items() if count >= self.minsup_c]
+        L1 = [set(item)
+              for item, count in C1.items() if count >= self.minsup_c]
         self.init_support_dict(C1)
         Lk_1 = L1
 
@@ -62,14 +64,11 @@ class Apriori:
         association_rules = self.get_rules(Lk_1)
         return association_rules
 
-    def get_powerset(self, s):
-        return chain.from_iterable(combinations(s, r) for r in range(len(s)+1))
-
 
     def get_rules(self, final_freqItemSets):
         mined_rules = []
         for m in final_freqItemSets:
-            s_powerset = self.get_powerset(m)
+            s_powerset = powerset(m)
             for p in s_powerset:
                 if len(p) == 0:
                     continue

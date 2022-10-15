@@ -1,21 +1,14 @@
-#%%
-import logging
-from optparse import Values
-from trie import Trie
-from typing import List, Tuple, Dict, Set, Optional, Union
+# %%
+from typing import List, Tuple, Dict, Optional, Union
 from collections import Counter, defaultdict
 from itertools import chain, combinations
-import importlib
 from itertools import combinations
-from copy import deepcopy
 from collections import deque
-import trie
-importlib.reload(trie)
-
+import math
+from utils import powerset
 
 NODELIST = 'nodelist'
 COUNT = 'count'
-
 
 class Node:
     def __init__(self,
@@ -28,12 +21,6 @@ class Node:
 
     def __repr__(self):
         return f'({self.item},{self.count})'
-
-
-"""
-conditional fp tree 的 input 可能會是一個path of nodes
-需要init header 時可以考慮
-"""
 
 
 class FPtree:
@@ -113,7 +100,8 @@ class FPtree:
         conditional_tree.build_tree(isMain=False, freqs=prefix_path_freq)
         return conditional_tree
 
-    def _process_prefix_paths(self, prefix_paths):
+    def _process_prefix_paths(self,
+                        prefix_paths):
         paths = []
         freqs = []
         for path, min_count in prefix_paths:
@@ -145,8 +133,8 @@ class FPtree:
                 paths.append((path[::-1], node.count))
         return paths
 
-    def _gen_freq_patterns(self,
-                           target_item: Union[str, int]) -> Dict[frozenset, int]:
+    def gen_freq_patterns(self,
+                          target_item: Union[str, int]) -> Dict[frozenset, int]:
         """Generate conditional pattern bases given a target_item
 
         Args:
@@ -179,7 +167,6 @@ class FPtree:
         return freq_patterns
 
     def print_tree(self):
-        # level-order traversal
         Q = deque([self.root])
         levels = []
         if not self.root:
@@ -194,36 +181,8 @@ class FPtree:
                 level.append(root)
             print(*level, sep=',')
             levels.append(level)
-        # return levels
 
-    # def get_conditional_tree(self, mainTree: FPtree,
-    #                          target_item: int, minsup_c: int):
-    #     cond_pattern_bases = []
-    #     cond_pattern_base_freqs = []
-    #     cond_pattern_tree = FPtree(minsup_c)
-    #     prefix_paths = mainTree._get_prefix_paths(target_item)
-    #     for path, min_count in prefix_paths:
-    #         # first initialize the headerTable
-    #         path_items, path_count = [x.item for x in path], [
-    #             min_count for x in path]
-    #         cond_pattern_bases.append(path_items)
-    #         cond_pattern_base_freqs.append(path_count)
-    #         cond_pattern_tree.insert(transaction=path_items,
-    #                                  freq=path_count)
-    #     # add leaves
-
-    #     return cond_pattern_bases, cond_pattern_base_freqs, cond_pattern_tree
-
-
-def _input_preproc(txs):
-    """DONT USE IT IN OFFICIAL VERSION"""
-    transactionList = txs
-    init_items = Counter(
-        [item for sublist in txs for item in sublist])
-    return transactionList, init_items
-
-
-def input_preproc(input_data: List[List[str]]) -> Tuple[defaultdict, Counter]:
+def preprocess(input_data: List[List[str]]) -> Tuple[defaultdict, Counter]:
     """Process the input data into List[List[int]] of transactions
     Args:
         input_data (List[List[str]]): ibm format
@@ -232,80 +191,160 @@ def input_preproc(input_data: List[List[str]]) -> Tuple[defaultdict, Counter]:
             transactionList: List of transactions in slides
             itemCounter: count the occurrences of all items, and EXCLUDE THOSE UNDER min support count
     """
-    transactions = defaultdict(list)
+    transactionDict = defaultdict(list)
     for line in input_data:
         tid, item_id = line[0], str(line[-1])
-        transactions[tid].append(item_id)
-    transactionList = [None for _ in range(len(transactions))]
-    for tid, values in transactions:
-        transactionList[tid] = values
+        transactionDict[tid].append(item_id)
+    transactionList = list(transactionDict.values())
     return transactionList
 
+def makeTree(transactions:List[List[Union[str, int]]],
+             min_support_ratio: float):
+    minsup_count = math.ceil(len(transactions) * min_support_ratio)
+    mainTree = FPtree(minsup_c=minsup_count,
+                      transactions=transactions,
+                      ItemFrequency=None)
+    mainTree.build_tree()
+    return mainTree
 
-def mine_tree(self, fptree: FPtree):
-    sortedI2N = sorted(fptree.item2nodes.items(),
-                       key=lambda x: x[1]['count'])
-    for item, info in sortedI2N:
-        cp_bases, cpb_freq, cptree = fptree.get_cond_pattern_bases(
-            item, self.minsup_c)
+def mineTree(mainTree:FPtree):
+    headerTable = mainTree.headerTable
+    sorted_headerTable = sorted(
+        headerTable.items(), key=lambda x: x[1][COUNT], reverse=True)
+    Item2FreqBases = {}
+    for item, _ in sorted_headerTable:
+        conditional_tree = mainTree.build_conditional_tree(item)
+        item_frequent_patterns = conditional_tree.gen_freq_patterns(item)
+        Item2FreqBases[item] = item_frequent_patterns
+    return Item2FreqBases
 
-        print(f'===== {item} =====')
-        print('conditional pattern bases:', cp_bases)
-        print('conditional pattern base freq:', cpb_freq)
+
+
+
+def flatten(freqPatterns:Dict):
+    return [(fzset) for item in freqPatterns for fzset in freqPatterns[item]]
+
+def getSupport(target_itemset,
+            transactionList):
+    count = 0
+    for transaction in transactionList:
+        itemset = frozenset(transaction)
+        if target_itemset.issubset(itemset):
+            count += 1
+    return count
+
+def getAssociationRules(transactionList,
+                        final_freqItemSets: Dict[frozenset, int],
+                        minconf:float):
+    mined_rules = []
+    global globalSupportDict
+    globalSupportDict = dict()
+    for m, m_support in final_freqItemSets:
+        m = frozenset(m)
+        s_powerset = powerset(m)
+
+        for p in s_powerset:
+            p = frozenset(p)
+            if len(p) == 0:
+                continue
+            m_p = m.difference(p)
+
+            p_support = globalSupportDict[p] if p in globalSupportDict \
+                else getSupport(p, transactionList)
+            m_p_support = globalSupportDict[m_p] if m_p in globalSupportDict \
+                else getSupport(m_p, transactionList)
+
+            globalSupportDict[p] = p_support
+            globalSupportDict[m_p] = m_p_support
+
+            confidence = m_support / p_support
+            support = m_support/len(transactionList)
+            lift = confidence / (m_p_support/len(transactionList))
+            if len(m_p) == 0:
+                continue
+            if confidence >= minconf:
+                mined_rules.append((p, m_p, support, confidence, lift)) # 'p -> m-p, s, c, l'
+    return mined_rules
+
+# 10/15 Calculate Support, Confidence, Lift
+# Export the answer to compare with package
+# 1. Rule Number, if 10 GROUND_TRUTH rules are inside the 手刻 rules
+# 2. Compare Frequent Itemsets (identcal)
+# 3. Compare Stats (Support, Confidence, Lift)
+
+#%%
+# Driver code; 10/14 converting to main function
+# 10/15 adding package tests for mined frequentSets and Rules
+# get support confifence lift
+
+
+# data = [[1,1,'A'], [1,1, 'C'], [1,1, 'D'],
+#         [2,2,'B'], [2,2,'C'], [2,2,'E'],
+#         [3,3,'A'], [3,3,'B'], [3,3,'C'], [3,3,'E'],
+#         [4,4,'B'], [4,4,'E']]
+# # self.logger.info(algo.input_preproc(data))
+# transactions = preprocess(data)
+
+# %%
+import time, psutil
+from mlxtend.frequent_patterns import fpgrowth, association_rules
+from mlxtend.preprocessing import TransactionEncoder
+from efficient_apriori import apriori
+import pandas as pd
+from typing import List, Tuple, Dict, Optional, Union
+from collections import Counter, defaultdict
+from itertools import chain, combinations
+from itertools import combinations
+from collections import deque
+from utils import read_file, timer
+
+
+# transactions = [['milk', 'bread', 'beer'],
+#                 ['bread', 'coffee'],
+#                 ['bread', 'egg'],
+#                 ['milk', 'bread', 'coffee'],
+#                 ['milk', 'egg'],
+#                 ['bread', 'egg'],
+#                 ['milk', 'egg'],
+#                 ['milk', 'bread', 'egg', 'beer'],
+#                 ['milk', 'bread', 'egg']]
+MINSUP, MINCONF = 0.2, 0.2
+filepath = '/Users/yangqingwen/Downloads/ibm-2022-release-testdata-1/2022-DM-release-testdata-2.data'
+data = read_file(
+    filepath)
+transactions = preprocess(data)
+
 
 
 #%%
-transactions = [['milk', 'bread', 'beer'],
-                ['bread', 'coffee'],
-                ['bread', 'egg'],
-                ['milk', 'bread', 'coffee'],
-                ['milk', 'egg'],
-                ['bread', 'egg'],
-                ['milk', 'egg'],
-                ['milk', 'bread', 'egg', 'beer'],
-                ['milk', 'bread', 'egg']]
-mainTree = FPtree(2, transactions, ItemFrequency=None)
-mainTree.build_tree()
-print(mainTree.headerTable)
-print('MAIN')
-mainTree.print_tree()
-print(' === CONDITIONAL FP TREE beer ===')
-conditional_tree = mainTree.build_conditional_tree('beer')
-conditional_tree.print_tree()
-beer_cpbases = conditional_tree._get_prefix_paths('beer')
-beerFreqPatterns = conditional_tree._gen_freq_patterns('beer')
+@timer
+def runMyFP(transactions):
+    mainTree = makeTree(transactions, min_support_ratio = MINSUP)
+    freqPatternDict = mineTree(mainTree)
+    # freqPatterns = flatten(freqPatternDict)
+    return freqPatternDict
+@timer
+def getMyRules():
+    global fptns
+    fptns = runMyFP(transactions)
 
+    # TIME BOTTLENECK 欸
+    # MyRules = getAssociationRules(transactions, fptns, minconf = MINCONF)
+    # return MyRules
+getMyRules()
+print(fptns)
 
-print(' === CONDITIONAL FP TREE coffee ===')
-conditional_tree = mainTree.build_conditional_tree('coffee')
-conditional_tree.print_tree()
-coffeeFreqPatterns = conditional_tree._gen_freq_patterns('coffee')
+#%%
+@timer
+def runLibFP(transactions):
+    te = TransactionEncoder()
+    te_ary = te.fit(transactions).transform(transactions)
+    df = pd.DataFrame(te_ary, columns=te.columns_)
+    global freqsets
+    freqsets = fpgrowth(df, min_support=MINSUP, use_colnames=True)
+    rules = association_rules(freqsets, metric="confidence", min_threshold=MINCONF)
+    return rules
 
-
-print(' === CONDITIONAL FP TREE egg ===')
-conditional_tree = mainTree.build_conditional_tree('egg')
-conditional_tree.print_tree()
-
-
-print('!!! Conditional Pattern Base !!!!')
-egg_cpbases = conditional_tree._get_prefix_paths('egg')
-eggFreqPatterns = conditional_tree._gen_freq_patterns('egg')
-
-
-print(' === CONDITIONAL FP TREE milk ===')
-conditional_tree = mainTree.build_conditional_tree('milk')
-conditional_tree.print_tree()
-milkFreqPatterns = conditional_tree._gen_freq_patterns('milk')
-
-print(' === CONDITIONAL FP TREE bread ===')
-conditional_tree = mainTree.build_conditional_tree('bread')
-conditional_tree.print_tree()
-breadFreqPatterns = conditional_tree._gen_freq_patterns('bread')
-
-# Conditional Pattern Base Generation
-
-
-# get combinations
-
+runLibFP(transactions)
 
 # %%

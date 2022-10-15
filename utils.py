@@ -3,6 +3,12 @@ import csv
 import time
 from pathlib import Path
 from typing import Any, List, Union
+from itertools import chain, combinations
+
+
+def powerset(s):
+    return chain.from_iterable(combinations(s, r) for r in range(len(s)+1))
+
 
 def timer(func):
     def wrapper(*args, **kwargs):
