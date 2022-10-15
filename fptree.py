@@ -143,6 +143,7 @@ class FPtree:
         Returns:
             _type_: _description_
         """
+
         # Meant to pass a conditional fptree
         max_cpbases = self._get_prefix_paths(target_item)
 
@@ -182,6 +183,7 @@ class FPtree:
             print(*level, sep=',')
             levels.append(level)
 
+
 def preprocess(input_data: List[List[str]]) -> Tuple[defaultdict, Counter]:
     """Process the input data into List[List[int]] of transactions
     Args:
@@ -198,7 +200,8 @@ def preprocess(input_data: List[List[str]]) -> Tuple[defaultdict, Counter]:
     transactionList = list(transactionDict.values())
     return transactionList
 
-def makeTree(transactions:List[List[Union[str, int]]],
+
+def makeTree(transactions: List[List[Union[str, int]]],
              min_support_ratio: float):
     minsup_count = math.ceil(len(transactions) * min_support_ratio)
     mainTree = FPtree(minsup_c=minsup_count,
@@ -207,7 +210,8 @@ def makeTree(transactions:List[List[Union[str, int]]],
     mainTree.build_tree()
     return mainTree
 
-def mineTree(mainTree:FPtree):
+
+def mineTree(mainTree: FPtree):
     headerTable = mainTree.headerTable
     sorted_headerTable = sorted(
         headerTable.items(), key=lambda x: x[1][COUNT], reverse=True)
@@ -215,14 +219,18 @@ def mineTree(mainTree:FPtree):
     for item, _ in sorted_headerTable:
         conditional_tree = mainTree.build_conditional_tree(item)
         item_frequent_patterns = conditional_tree.gen_freq_patterns(item)
-        Item2FreqBases[item] = item_frequent_patterns
+        N = len(mainTree.transactionList)
+        item_frequent_patterns = {
+            k: v/N for k, v in item_frequent_patterns.items() if v >= mainTree.minsup_c}
+        if item_frequent_patterns:
+            Item2FreqBases[item] = item_frequent_patterns
     return Item2FreqBases
 
 
 
 
 def flatten(freqPatterns:Dict):
-    return [(fzset) for item in freqPatterns for fzset in freqPatterns[item]]
+    return [(fzset, fzscount) for item in freqPatterns for fzset,fzscount in freqPatterns[item].items()]
 
 def getSupport(target_itemset,
             transactionList):
@@ -239,10 +247,9 @@ def getAssociationRules(transactionList,
     mined_rules = []
     global globalSupportDict
     globalSupportDict = dict()
-    for m, m_support in final_freqItemSets:
+    for m, m_support_ratio in final_freqItemSets:
         m = frozenset(m)
         s_powerset = powerset(m)
-
         for p in s_powerset:
             p = frozenset(p)
             if len(p) == 0:
@@ -253,12 +260,10 @@ def getAssociationRules(transactionList,
                 else getSupport(p, transactionList)
             m_p_support = globalSupportDict[m_p] if m_p in globalSupportDict \
                 else getSupport(m_p, transactionList)
-
             globalSupportDict[p] = p_support
             globalSupportDict[m_p] = m_p_support
-
-            confidence = m_support / p_support
-            support = m_support/len(transactionList)
+            confidence = m_support_ratio*len(transactionList) / p_support
+            support = m_support_ratio
             lift = confidence / (m_p_support/len(transactionList))
             if len(m_p) == 0:
                 continue
@@ -308,31 +313,27 @@ from utils import read_file, timer
 #                 ['milk', 'egg'],
 #                 ['milk', 'bread', 'egg', 'beer'],
 #                 ['milk', 'bread', 'egg']]
-MINSUP, MINCONF = 0.2, 0.2
+MINSUP, MINCONF = 0.1, 0.1
 filepath = '/Users/yangqingwen/Downloads/ibm-2022-release-testdata-1/2022-DM-release-testdata-2.data'
 data = read_file(
     filepath)
 transactions = preprocess(data)
-
-
-
 #%%
 @timer
 def runMyFP(transactions):
+    global mainTree
     mainTree = makeTree(transactions, min_support_ratio = MINSUP)
     freqPatternDict = mineTree(mainTree)
-    # freqPatterns = flatten(freqPatternDict)
-    return freqPatternDict
+    freqPatterns = flatten(freqPatternDict)
+    return freqPatterns
 @timer
 def getMyRules():
     global fptns
     fptns = runMyFP(transactions)
-
     # TIME BOTTLENECK 欸
-    # MyRules = getAssociationRules(transactions, fptns, minconf = MINCONF)
-    # return MyRules
-getMyRules()
-print(fptns)
+    MyRules = getAssociationRules(transactions, fptns, minconf = MINCONF)
+    return MyRules
+myrules = getMyRules()
 
 #%%
 @timer
@@ -344,7 +345,6 @@ def runLibFP(transactions):
     freqsets = fpgrowth(df, min_support=MINSUP, use_colnames=True)
     rules = association_rules(freqsets, metric="confidence", min_threshold=MINCONF)
     return rules
-
 runLibFP(transactions)
 
 # %%
