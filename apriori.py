@@ -1,157 +1,146 @@
 
-#%%
-from trie import Trie
-import logging
-from utils import powerset
-from typing import List, Tuple, Dict, Set
-from collections import Counter, defaultdict
-from itertools import chain, combinations
-import trie
-import importlib
-from copy import deepcopy
-importlib.reload(trie)
 
+import logging
+from typing import List, Set, Union, FrozenSet
+from collections import Counter, defaultdict
+from copy import deepcopy
+from utils import powerset
+import itertools
+from trie import Trie
 
 class Apriori:
-
-    def __init__(self):
+    def __init__(self,
+                transactions: List[List[Union[int, str]]],
+                minsup:float,
+                minconf:float):
         logging.basicConfig(level=logging.INFO)
+
+        self.transactionList = transactions
+        self.MINSUP = minsup
+        self.MINCONF = minconf
+        self.minsup_c = int(self.MINSUP * len(self.transactionList))
         self.logger = logging.getLogger(__name__)
+
+    def getC1(self) -> Counter:
+        flattened_items = []
+        for transac in self.transactionList:
+            for item in transac:
+                flattened_items.append(item)
+        return Counter(flattened_items)
 
     def init_support_dict(self, C1):
         self.globalSupport = defaultdict(int)
         for c, c_count in C1.items():
-            self.globalSupport[frozenset(c)] = c_count
+            self.globalSupport[frozenset([c])] = c_count
 
-    def input_preproc(self, input_data: List[List[str]]) -> Tuple[defaultdict, Counter]:
-        transactions = defaultdict(list)
-        init_items = Counter()
-        for line in input_data:
-            tid, item_id = line[0], str(line[-1])
-            transactions[tid].append(item_id)
-            init_items[item_id] += 1
-        return transactions, init_items
-
-    def gen_rules(self, input_data: List[List[int]]):
-        # MINSUP = args.min_sup
-        # MINCONF = args.min_conf
-        # MAXMERGE = args.max_merge
+    def gen_freq_patterns(self):
         MAXMERGE = 2000
-        MINSUP = 0.5
-        MINCONF = 0.66
         # ===================================
-        self.transactions, C1 = self.input_preproc(input_data)
-        self.minsup_c = int(MINSUP * len(self.transactions))
-        self.minsup = MINSUP
-        self.minconf = MINCONF
-        self.logger.info(C1)
-        L1 = [set(item)
-              for item, count in C1.items() if count >= self.minsup_c]
+        C1 = self.getC1()
         self.init_support_dict(C1)
+        L1 = [frozenset([item])
+              for item, count in C1.items() if count >= self.minsup_c]
+        FreqItemSets = []
+        FreqItemSets.extend(L1)
         Lk_1 = L1
-
         for k in range(2, MAXMERGE):
-            self.logger.info(f'L_{k-1}:{Lk_1}')
+
             Ck = self.join(k, Lk_1)
-            self.logger.info(f'C_{k} = {Ck}')
-            Ck = self.prune(k, Ck, Lk_1)
-            self.logger.info(f'pruned C_{k} = {Ck}')
-            Lk = self.get_support(Ck)
-            self.logger.info(f'L_{k} = {Lk}')
-            if Lk == []:
+            self.logger.info(f'[size] C_{k} = {len(Ck)}')
+            pruned_Ck = self.prune(k, Ck, Lk_1)
+            self.logger.info(f'[size] pruned C_{k} = {len(pruned_Ck)}')
+            Lk = self.get_above_support(k, pruned_Ck)
+            self.logger.info(f'[size] L_{k} = {len(Lk)}')
+
+            if len(Lk) == 0:
                 break
             Lk_1 = Lk
-        association_rules = self.get_rules(Lk_1)
-        return association_rules
+            FreqItemSets.extend(Lk)
 
+        return FreqItemSets
 
-    def get_rules(self, final_freqItemSets):
-        mined_rules = []
-        for m in final_freqItemSets:
-            s_powerset = powerset(m)
-            for p in s_powerset:
-                if len(p) == 0:
-                    continue
-                m, p = frozenset(m), frozenset(p)
-                p_support = self.globalSupport[p]
-                m_support = self.globalSupport[m]
-                confidence = m_support / p_support
-                m_p = m.difference(p)
-                if len(m_p) == 0:
-                    continue
-                if confidence >= self.minconf:
-                    mined_rules.append((p, m_p, confidence)) # 'p -> m-p, confidence'
-        return mined_rules
+    def prune(self, k:int,
+        Ck:Set[FrozenSet[int]],
+        Lk_1:Set[FrozenSet[int]]) -> Set[FrozenSet[str]]:
+        pruned_Ck = set()
+        for c in Ck:
 
+            keep_set = True
+            # check if all (k-1) subsets in the current candidate `c` appears in the Lk-1
+            c_subsets = itertools.combinations(c, k-1)
+            for subset in c_subsets:
+                subset = frozenset(subset)
+                if subset not in Lk_1:
+                    keep_set = False; break
+            if keep_set:
+                pruned_Ck.add(c)
+        return pruned_Ck
 
-    def join(self, k:int, Lk_1:List[Set[str]]) -> List[Set[str]]:
-        Ck = []
+    def join(self, k:int, Lk_1:Set[FrozenSet[str]]) -> Set[FrozenSet[str]]:
+        Ck = set()
+        sorted_Lk_1 = {}
         tree = Trie(k)
+
         for l in Lk_1:
-            l = sorted(list(l))
-            tree.insert(l)
+            sl = sorted(list(l))
+            tree.insert(sl)
+            sorted_Lk_1[l] = sl
+
         for l in Lk_1:
-            curl = deepcopy(l)
-            l = sorted(list(l))
-            prefix = l[:k-2]
-            suffix = l[-1]
+            sortedl = sorted_Lk_1[l]
+            prefix = sortedl[:k-2]
+            suffix = sortedl[-1]
+            assert prefix + [suffix] == sortedl
             candidates = tree.get_clean_children(prefix = prefix)
             for c in candidates:
-                if c > suffix:
-                    cloned_curl = deepcopy(curl)
-                    cloned_curl.add(c)
-                    Ck.append(cloned_curl)
+                if c != suffix:
+                    cloned_l = set(deepcopy(l))
+                    cloned_l.add(c)
+                    assert len(cloned_l) == k
+                    Ck.add(frozenset(cloned_l))
         return Ck
 
-    def get_support(self, itemsets:List[Set[str]]) -> List[Set[str]]:
+    def get_above_support(self,
+                k:int,
+                itemsets:Set[FrozenSet[str]]) -> Set[FrozenSet[str]]:
         """Scanning DB (transactions) to recalc support for each itemset
         Args:
             itemsets (List[int]): L
         Returns:
             List[List[int]]: the itemsets with support >= min support count (minsup_c)
         """
-        aboveSup = []
-        for transac in self.transactions.values():
+        Lk = set()
+        for transac in self.transactionList:
             for itemset in itemsets:
-                setkey = frozenset(itemset)
-                if itemset.issubset(transac):
-                    self.globalSupport[setkey] += 1
+                transac = frozenset(transac)
+                if itemset.issubset(transac) and len(itemset) == k:
+                    self.globalSupport[itemset] += 1
+
+
         for itemset in itemsets:
-            setkey = frozenset(itemset)
-            if self.globalSupport[setkey] < self.minsup_c:
+            if self.globalSupport[itemset] <= self.minsup_c:
                 continue
-            aboveSup.append(itemset)
-        return aboveSup
+            Lk.add(itemset)
+        return Lk
 
-    def prune(self, k:int, Ck:List[Set[int]], Lk_1:List[Set[str]]) -> List[Set[str]]:
-        pruned_Ck = []
-        for c in Ck:
-            subsets = chain.from_iterable(combinations(c, k))
-            to_prune = False
-            for subset in subsets:
-                if subset not in Lk_1: # linear
-                    break; to_prune = True
-            if not to_prune:
-                pruned_Ck.append(c)
-        return pruned_Ck
-
-
-#%%
-algo = Apriori()
-data2 = [
-    [1,1,1], [1,1,3], [1,1,4],
-    [2,2,2], [2,2,3], [2,2,5],
-    [3,3,1], [3,3,2], [3,3,3], [3,3,5],
-    [4,4,2], [4,4,5],
-    [5,5,1], [5,5,3], [5,5,5],
-]
-rules = algo.gen_rules(data2)
-print(rules)
-#%%
-algo = Apriori()
-data = [[1,1,'A'], [1,1, 'C'], [1,1, 'D'],
-        [2,2,'B'], [2,2,'C'], [2,2,'E'],
-        [3,3,'A'], [3,3,'B'], [3,3,'C'], [3,3,'E'],
-        [4,4,'B'], [4,4,'E']]
-# self.logger.info(algo.input_preproc(data))
-rules = algo.gen_rules(data)
+    def get_rules(self, final_freqItemSets):
+        mined_rules = []
+        for m in final_freqItemSets:
+            global m_powerset
+            m_powerset = powerset(m)
+            for p in m_powerset:
+                if len(p) == 0:
+                    continue
+                p = frozenset(p)
+                p_support = self.globalSupport[p]
+                m_support = self.globalSupport[m]
+                m_p = m.difference(p)
+                m_p_support =self.globalSupport[m_p]
+                support = m_support/len(self.transactionList)
+                confidence = m_support / p_support
+                if len(m_p) == 0:
+                    continue
+                lift = confidence/(m_p_support/len(self.transactionList))
+                if confidence > self.MINCONF:
+                    mined_rules.append((p, m_p, support, confidence, lift)) # 'p -> m-p, confidence'
+        return mined_rules
