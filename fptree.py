@@ -5,7 +5,7 @@ from itertools import chain, combinations
 from itertools import combinations
 from collections import deque
 import math
-from utils import powerset, preprocess
+from utils import powerset 
 
 NODELIST = 'nodelist'
 COUNT = 'count'
@@ -251,7 +251,7 @@ def getAssociationRules(transactionList,
             lift = confidence / (m_p_support/len(transactionList))
             if len(m_p) == 0:
                 continue
-            if confidence >= minconf:
+            if confidence > minconf:
                 mined_rules.append((p, m_p, support, confidence, lift)) # 'p -> m-p, s, c, l'
     return mined_rules
 

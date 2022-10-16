@@ -2,9 +2,25 @@ import logging
 import csv
 import time
 from pathlib import Path
-from typing import Any, List, Union
+from collections import Counter, defaultdict
+from typing import Any, List, Union, Tuple
 from itertools import chain, combinations
 
+def preprocess(input_data: List[List[str]]) -> Tuple[defaultdict, Counter]:
+    """Process the input data into List[List[int]] of transactions
+    Args:
+        input_data (List[List[str]]): ibm format
+    Returns:
+        Tuple[defaultdict, Counter]:
+            transactionList: List of transactions in slides
+            itemCounter: count the occurrences of all items, and EXCLUDE THOSE UNDER min support count
+    """
+    transactionDict = defaultdict(list)
+    for line in input_data:
+        tid, item_id = line[0], str(line[-1])
+        transactionDict[tid].append(item_id)
+    transactionList = list(transactionDict.values())
+    return transactionList
 
 def powerset(s):
     return chain.from_iterable(combinations(s, r) for r in range(len(s)+1))
