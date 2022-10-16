@@ -1,14 +1,18 @@
 # %%
-from typing import List, Tuple, Dict, Optional, Union
+from typing import List,  Dict, Optional, Union
 from collections import Counter, defaultdict
 from itertools import chain, combinations
 from itertools import combinations
 from collections import deque
 import math
-from utils import powerset
+from utils import powerset, preprocess
 
 NODELIST = 'nodelist'
 COUNT = 'count'
+
+# 10/15 Calculate Support, Confidence, Lift
+# Export the answer to compare with package
+# 1. Rule Number Match 2. FreqItemSets Match
 
 class Node:
     def __init__(self,
@@ -184,23 +188,6 @@ class FPtree:
             levels.append(level)
 
 
-def preprocess(input_data: List[List[str]]) -> Tuple[defaultdict, Counter]:
-    """Process the input data into List[List[int]] of transactions
-    Args:
-        input_data (List[List[str]]): ibm format
-    Returns:
-        Tuple[defaultdict, Counter]:
-            transactionList: List of transactions in slides
-            itemCounter: count the occurrences of all items, and EXCLUDE THOSE UNDER min support count
-    """
-    transactionDict = defaultdict(list)
-    for line in input_data:
-        tid, item_id = line[0], str(line[-1])
-        transactionDict[tid].append(item_id)
-    transactionList = list(transactionDict.values())
-    return transactionList
-
-
 def makeTree(transactions: List[List[Union[str, int]]],
              min_support_ratio: float):
     minsup_count = math.ceil(len(transactions) * min_support_ratio)
@@ -225,9 +212,6 @@ def mineTree(mainTree: FPtree):
         if item_frequent_patterns:
             Item2FreqBases[item] = item_frequent_patterns
     return Item2FreqBases
-
-
-
 
 def flatten(freqPatterns:Dict):
     return [(fzset, fzscount) for item in freqPatterns for fzset,fzscount in freqPatterns[item].items()]
@@ -271,80 +255,3 @@ def getAssociationRules(transactionList,
                 mined_rules.append((p, m_p, support, confidence, lift)) # 'p -> m-p, s, c, l'
     return mined_rules
 
-# 10/15 Calculate Support, Confidence, Lift
-# Export the answer to compare with package
-# 1. Rule Number, if 10 GROUND_TRUTH rules are inside the 手刻 rules
-# 2. Compare Frequent Itemsets (identcal)
-# 3. Compare Stats (Support, Confidence, Lift)
-
-#%%
-# Driver code; 10/14 converting to main function
-# 10/15 adding package tests for mined frequentSets and Rules
-# get support confifence lift
-
-
-# data = [[1,1,'A'], [1,1, 'C'], [1,1, 'D'],
-#         [2,2,'B'], [2,2,'C'], [2,2,'E'],
-#         [3,3,'A'], [3,3,'B'], [3,3,'C'], [3,3,'E'],
-#         [4,4,'B'], [4,4,'E']]
-# # self.logger.info(algo.input_preproc(data))
-# transactions = preprocess(data)
-
-# %%
-import time, psutil
-from mlxtend.frequent_patterns import fpgrowth, association_rules
-from mlxtend.preprocessing import TransactionEncoder
-from efficient_apriori import apriori
-import pandas as pd
-from typing import List, Tuple, Dict, Optional, Union
-from collections import Counter, defaultdict
-from itertools import chain, combinations
-from itertools import combinations
-from collections import deque
-from utils import read_file, timer
-
-
-# transactions = [['milk', 'bread', 'beer'],
-#                 ['bread', 'coffee'],
-#                 ['bread', 'egg'],
-#                 ['milk', 'bread', 'coffee'],
-#                 ['milk', 'egg'],
-#                 ['bread', 'egg'],
-#                 ['milk', 'egg'],
-#                 ['milk', 'bread', 'egg', 'beer'],
-#                 ['milk', 'bread', 'egg']]
-MINSUP, MINCONF = 0.1, 0.1
-filepath = '/Users/yangqingwen/Downloads/ibm-2022-release-testdata-1/2022-DM-release-testdata-2.data'
-data = read_file(
-    filepath)
-transactions = preprocess(data)
-#%%
-@timer
-def runMyFP(transactions):
-    global mainTree
-    mainTree = makeTree(transactions, min_support_ratio = MINSUP)
-    freqPatternDict = mineTree(mainTree)
-    freqPatterns = flatten(freqPatternDict)
-    return freqPatterns
-@timer
-def getMyRules():
-    global fptns
-    fptns = runMyFP(transactions)
-    # TIME BOTTLENECK 欸
-    MyRules = getAssociationRules(transactions, fptns, minconf = MINCONF)
-    return MyRules
-myrules = getMyRules()
-
-#%%
-@timer
-def runLibFP(transactions):
-    te = TransactionEncoder()
-    te_ary = te.fit(transactions).transform(transactions)
-    df = pd.DataFrame(te_ary, columns=te.columns_)
-    global freqsets
-    freqsets = fpgrowth(df, min_support=MINSUP, use_colnames=True)
-    rules = association_rules(freqsets, metric="confidence", min_threshold=MINCONF)
-    return rules
-runLibFP(transactions)
-
-# %%
