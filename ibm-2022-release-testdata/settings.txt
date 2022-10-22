@@ -1,0 +1,2 @@
+Setting: 
+./gen lit -ntrans 5 -nitems 0.01 -fname try -conf 0.3

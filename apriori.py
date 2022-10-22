@@ -7,6 +7,7 @@ from copy import deepcopy
 from utils import powerset
 import itertools
 from trie import Trie
+import math
 
 class Apriori:
     def __init__(self,
@@ -18,7 +19,7 @@ class Apriori:
         self.transactionList = transactions
         self.MINSUP = minsup
         self.MINCONF = minconf
-        self.minsup_c = int(self.MINSUP * len(self.transactionList))
+        self.minsup_c = math.ceil(self.MINSUP * len(self.transactionList))
         self.logger = logging.getLogger(__name__)
 
     def getC1(self) -> Counter:
@@ -118,9 +119,8 @@ class Apriori:
 
 
         for itemset in itemsets:
-            if self.globalSupport[itemset] <= self.minsup_c:
-                continue
-            Lk.add(itemset)
+            if self.globalSupport[itemset] >= self.minsup_c:
+                Lk.add(itemset)
         return Lk
 
     def get_rules(self, final_freqItemSets):
@@ -141,6 +141,6 @@ class Apriori:
                 if len(m_p) == 0:
                     continue
                 lift = confidence/(m_p_support/len(self.transactionList))
-                if confidence > self.MINCONF:
+                if confidence >= self.MINCONF:
                     mined_rules.append((p, m_p, support, confidence, lift)) # 'p -> m-p, confidence'
         return mined_rules

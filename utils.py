@@ -47,23 +47,45 @@ def read_file(filename: Union[str, Path]) -> List[List[int]]:
         List[List[int]]: The data in the file
     """
     return [
-        [int(x) for x in line.split()]
+        [x for x in line.split()]
+        #
         for line in Path(filename).read_text().splitlines()
     ]
 
 @timer
-def write_file(data: List[List[Any]], filename: Union[str, Path]) -> None:
+def write_file(data: List[Tuple[Any]], filename: Union[str, Path]) -> None:
     """write_file writes the data to a csv file and
-    adds a header row with `relationship`, `support`, `confidence`, `lift`.
+    adds a header row with `antecedent`, `consequent`, `support`, `confidence`, `lift`.
 
     Args:
-        data (List[List[Any]]): The data to write to the file
+        data (List[Tuple[Any]]): The data to write to the file
+        # Tuple example:
+        #  (frozenset({'15'}),
+        #  frozenset({'12'}),
+        #  0.10951585976627713,
+        #  0.3791907514450867,
+        #  1.0240543738305092)
         filename (Union[str, Path]): The filename to write to
     """
+    proc_data = []
+    for rule in data:
+        PREC = 3
+        a, c, sup, conf, lift = rule
+        a, c = ' '.join(list(set(a))), ' '.join(list(set(c)))
+        a = '{' + a + '}'
+        c = '{' + c + '}'
+        sup = round(sup, PREC)
+        conf = round(conf, PREC)
+        lift = round(lift, PREC)
+        proc_data.append([a, c, sup, conf, lift])
+
     with open(filename, 'w') as f:
         writer = csv.writer(f)
-        writer.writerow(["relationship", "support", "confidence", "lift"])
-        writer.writerows(data)
+        writer.writerow(["antecedent", "consequent",
+                        "support", "confidence", "lift"])
+        writer.writerows(proc_data)
+
+
 
 
 def setup_logger():

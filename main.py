@@ -28,40 +28,68 @@ The `a` is a `Namespace` object that contains the following attributes:
     - min_conf: the minimum confidence
 you can access them by `a.dataset`, `a.min_sup`, `a.min_conf`.
 """
+#%%
 from pathlib import Path
 from typing import List
 import utils
-from utils import l
+from utils import l, timer
+from utils import preprocess
 import config
 import args
+# ==========My Own Packages============
+import fptree
+from fptree import *
+from apriori import *
 
-# TODO: you have to implement this module by yourself
-# import my_cool_algorithms
+@timer
+def myApriori(transactions, args):
+    myapriori = Apriori(transactions,
+                        minsup=args.min_sup,
+                        minconf=args.min_conf)
+    apPatterns = myapriori.gen_freq_patterns()
+    apRules = myapriori.get_rules(apPatterns)
+
+    return apRules, apPatterns
+
+@timer
+def myFP(transactions, args):
+    mainTree = makeTree(transactions, min_support_ratio=args.min_sup)
+    freqPatternDict = mineTree(mainTree)
+    fpPatterns = flatten(freqPatternDict)
+    fpRules = getAssociationRules(
+        transactions, fpPatterns, minconf=args.min_conf)
+    return fpRules, fpPatterns
 
 def main():
     # Parse command line arguments
     a = args.parse_args()
     l.info(f"Arguments: {a}")
-    
     # Load dataset, the below io handles ibm dataset
     input_data: List[List[str]] = utils.read_file(config.IN_DIR / a.dataset)
+    transactions = preprocess(input_data)
     filename = Path(a.dataset).stem
 
-    # # TODO: you have to implement this function by yourself
-    # apriori_out = my_cool_algorithms.apriori(input_data, a)
-    # # Write output to file
-    # utils.write_file(
-    #     data=apriori_out,
-    #     filename=config.OUT_DIR / f"{filename}-apriori.csv"
-    # )
 
-    # # TODO: you have to implement this function by yourself
-    # fp_growth_out = my_cool_algorithms.fp_growth(input_data, a)
-    # # Write output to file
-    # utils.write_file(
-    #     data=fp_growth_out,
-    #     filename=config.OUT_DIR / f"{filename}-fp_growth.csv"
-    # )
 
+    apRules, apPatterns = myApriori(transactions, a)
+    fpRules, fpPatterns = myFP(transactions, a)
+
+
+    l.info(f'minsup = {a.min_sup}, minconf = {a.min_conf}')
+    l.info(f'========Apriori=========')
+    l.info(f'Freqset Size: {len(apPatterns)}')
+    l.info(f'Rules Num: {len(apRules)}')
+    l.info(f'========FPGrowth=========')
+    l.info(f'Freqset Size: {len(fpPatterns)}')
+    l.info(f'Rules Num: {len(fpRules)}')
+    utils.write_file(
+        data=apRules,
+        filename=config.OUT_DIR / f"{filename}-apriori.csv"
+    )
+    utils.write_file(
+        data=fpRules,
+        filename=config.OUT_DIR / f"{filename}-fp_growth.csv"
+    )
 if __name__ == "__main__":
     main()
+# %%
